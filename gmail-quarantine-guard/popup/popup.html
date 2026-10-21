@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quarantine Guard — Quản lý Whitelist</title>
+  <style>
+    /* =====================================================
+       CSS VARIABLES & RESET
+       ===================================================== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-dark:    #0f172a;
+      --bg-surface: #1e293b;
+      --bg-input:   #0f172a;
+      --border:     rgba(148, 163, 184, 0.15);
+      --border-accent: rgba(148, 163, 184, 0.28);
+      --text-primary:   #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted:     #64748b;
+      --danger:  #ef4444;
+      --warning: #f59e0b;
+      --success: #22c55e;
+      --primary: #3b82f6;
+      --primary-glow: rgba(59,130,246,0.35);
+      --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --radius: 10px;
+    }
+
+    html, body {
+      width: 380px;
+      min-height: 500px;
+      background: var(--bg-dark);
+      color: var(--text-primary);
+      font-family: var(--font);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    /* =====================================================
+       HEADER
+       ===================================================== */
+    .header {
+      padding: 18px 20px 14px;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .header-icon {
+      font-size: 28px;
+      line-height: 1;
+    }
+
+    .header-text h1 {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-primary);
+      line-height: 1.2;
+    }
+
+    .header-text p {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .status-dot {
+      margin-left: auto;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
+      flex-shrink: 0;
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.5; }
+    }
+
+    /* =====================================================
+       MAIN CONTENT
+       ===================================================== */
+    .content {
+      padding: 16px 20px;
+    }
+
+    /* Section Title */
+    .section-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .domain-count {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      background: rgba(148, 163, 184, 0.1);
+      padding: 2px 8px;
+      border-radius: 10px;
+    }
+
+    /* =====================================================
+       ADD DOMAIN FORM
+       ===================================================== */
+    .add-form {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .domain-input {
+      flex: 1;
+      padding: 10px 14px;
+      background: var(--bg-input);
+      border: 1px solid var(--border-accent);
+      border-radius: var(--radius);
+      color: var(--text-primary);
+      font-family: var(--font);
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      min-width: 0;
+    }
+
+    .domain-input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .domain-input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+    }
+
+    .domain-input.input-error {
+      border-color: var(--danger);
+      box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+    }
+
+    .add-btn {
+      padding: 10px 14px;
+      background: linear-gradient(135deg, #2563eb, #3b82f6);
+      border: none;
+      border-radius: var(--radius);
+      color: #fff;
+      font-family: var(--font);
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .add-btn:hover {
+      background: linear-gradient(135deg, #1d4ed8, #2563eb);
+      box-shadow: 0 0 16px var(--primary-glow);
+      transform: translateY(-1px);
+    }
+
+    .add-btn:active { transform: translateY(0); }
+    .add-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    /* Error message */
+    .error-msg {
+      display: none;
+      font-size: 11px;
+      color: #fca5a5;
+      margin-top: -10px;
+      margin-bottom: 12px;
+      padding-left: 4px;
+    }
+
+    .error-msg.visible { display: block; }
+
+    /* =====================================================
+       DOMAIN LIST
+       ===================================================== */
+    .domain-list-container {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--bg-surface);
+      margin-bottom: 16px;
+      max-height: 280px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border-accent) transparent;
+    }
+
+    .domain-list-container:empty::before,
+    .domain-list-empty {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 8px;
+      padding: 32px 20px;
+      color: var(--text-muted);
+      font-size: 13px;
+      text-align: center;
+    }
+
+    .domain-list-empty .empty-icon {
+      font-size: 28px;
+    }
+
+    .domain-item {
+      display: flex;
+      align-items: center;
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--border);
+      transition: background 0.15s ease;
+      gap: 10px;
+      animation: domain-slide-in 0.25s ease;
+    }
+
+    @keyframes domain-slide-in {
+      from { opacity: 0; transform: translateX(-8px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    .domain-item:last-child { border-bottom: none; }
+    .domain-item:hover { background: rgba(148, 163, 184, 0.05); }
+
+    .domain-icon {
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+
+    .domain-name {
+      flex: 1;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-primary);
+      word-break: break-all;
+      min-width: 0;
+    }
+
+    .domain-default-badge {
+      font-size: 10px;
+      font-weight: 700;
+      color: #86efac;
+      background: rgba(34, 197, 94, 0.1);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      padding: 2px 7px;
+      border-radius: 10px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .domain-remove-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      color: var(--text-muted);
+      font-size: 14px;
+      cursor: pointer;
+      padding: 4px 7px;
+      line-height: 1;
+      transition: all 0.15s ease;
+      flex-shrink: 0;
+    }
+
+    .domain-remove-btn:hover {
+      background: var(--danger);
+      border-color: var(--danger);
+      color: #fff;
+    }
+
+    /* =====================================================
+       STATS BAR
+       ===================================================== */
+    .stats-bar {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .stat-card {
+      padding: 10px 12px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-primary);
+      display: block;
+      line-height: 1.2;
+    }
+
+    .stat-value.stat-protected { color: var(--success); }
+    .stat-value.stat-domains   { color: #93c5fd; }
+
+    .stat-label {
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-top: 2px;
+      display: block;
+    }
+
+    /* =====================================================
+       FOOTER
+       ===================================================== */
+    .footer {
+      padding: 12px 20px 16px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .footer-note {
+      font-size: 11px;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    .version-badge {
+      font-size: 10px;
+      color: var(--text-muted);
+      background: rgba(148, 163, 184, 0.08);
+      padding: 3px 8px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+    }
+
+    /* =====================================================
+       NOTIFICATION TOAST (in-popup)
+       ===================================================== */
+    .popup-toast {
+      position: fixed;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #fff;
+      opacity: 0;
+      transition: all 0.25s ease;
+      white-space: nowrap;
+      z-index: 9999;
+      pointer-events: none;
+    }
+
+    .popup-toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .popup-toast-success { background: linear-gradient(135deg, #059669, #22c55e); }
+    .popup-toast-error   { background: linear-gradient(135deg, #dc2626, #ef4444); }
+    .popup-toast-info    { background: linear-gradient(135deg, #2563eb, #3b82f6); }
+  </style>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header class="header">
+    <div class="header-icon">🛡</div>
+    <div class="header-text">
+      <h1>Quarantine Guard</h1>
+      <p>Quản lý Danh sách Whitelist Domains</p>
+    </div>
+    <div class="status-dot" id="status-dot" title="Extension đang hoạt động"></div>
+  </header>
+
+  <main class="content">
+
+    <!-- STATS BAR -->
+    <div class="stats-bar">
+      <div class="stat-card">
+        <span class="stat-value stat-domains" id="stat-domain-count">0</span>
+        <span class="stat-label">Domains Whitelist</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-value stat-protected">✓</span>
+        <span class="stat-label">Gmail Được Bảo Vệ</span>
+      </div>
+    </div>
+
+    <!-- ADD DOMAIN FORM -->
+    <div class="section-title">
+      <span>Thêm Domain Mới</span>
+    </div>
+
+    <form class="add-form" id="add-form" autocomplete="off">
+      <input
+        type="text"
+        class="domain-input"
+        id="domain-input"
+        placeholder="vd: company.com, trusted.org"
+        aria-label="Nhập tên domain cần thêm vào Whitelist"
+        spellcheck="false"
+        maxlength="253"
+      />
+      <button type="submit" class="add-btn" id="add-btn" aria-label="Thêm domain">
+        + Thêm
+      </button>
+    </form>
+
+    <p class="error-msg" id="error-msg" role="alert"></p>
+
+    <!-- DOMAIN LIST -->
+    <div class="section-title">
+      <span>Danh sách Whitelist</span>
+      <span class="domain-count" id="domain-count-badge">0 domains</span>
+    </div>
+
+    <div class="domain-list-container" id="domain-list" role="list" aria-label="Danh sách domain Whitelist">
+      <!-- Được render bởi popup.js -->
+    </div>
+
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <span class="footer-note">
+      Mọi thay đổi có hiệu lực <br />ngay lập tức trên Gmail.
+    </span>
+    <span class="version-badge" id="version-badge">v1.0.0</span>
+  </footer>
+
+  <!-- In-popup Toast -->
+  <div class="popup-toast" id="popup-toast" role="status" aria-live="polite"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

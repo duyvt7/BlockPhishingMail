@@ -1,0 +1,52 @@
+{
+  "manifest_version": 3,
+  "name": "Webmail Quarantine Guard",
+  "version": "1.0.0",
+  "description": "Phát hiện, cảnh báo và cách ly email ngoài danh sách Whitelist trên Gmail. Kiến trúc Modular (Adapter Pattern) để tái sử dụng cho các Webmail nội bộ.",
+  "author": "BlockPhishingMai",
+  "icons": {
+    "16": "icons/icon16.svg",
+    "48": "icons/icon48.svg",
+    "128": "icons/icon128.svg"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.svg",
+      "48": "icons/icon48.svg"
+    },
+    "default_title": "Quarantine Guard - Quản lý Whitelist"
+  },
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://mail.google.com/*"],
+      "js": [
+        "src/core/domain-validator.js",
+        "src/core/content-sanitizer.js",
+        "src/core/quarantine-ui.js",
+        "src/core/orchestrator.js",
+        "src/adapters/gmail.adapter.js",
+        "src/main.js"
+      ],
+      "css": ["styles/quarantine.css"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "permissions": [
+    "storage",
+    "notifications",
+    "scripting",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://mail.google.com/*"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
+}

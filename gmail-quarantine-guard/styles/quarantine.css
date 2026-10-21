@@ -1,0 +1,813 @@
+/**
+ * quarantine.css
+ * Giao diện cho Webmail Quarantine Guard
+ * Bao gồm: Modal, Badge, Row Highlight, Shield Overlay, Sandbox Viewer, Toast
+ *
+ * Design System:
+ *   - Dark Mode với glassmorphism
+ *   - Màu cảnh báo: Amber (#f59e0b) / Danger: (#ef4444)
+ *   - Màu an toàn: Green (#22c55e)
+ *   - Font: System UI stack (không cần Google Fonts để tránh CSP)
+ *   - Animations: Smooth transitions với cubic-bezier
+ */
+
+/* ============================================================
+   CSS VARIABLES — Design Tokens
+   ============================================================ */
+:root {
+  --mg-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --mg-mono: 'Cascadia Code', 'Fira Code', Consolas, 'Courier New', monospace;
+
+  /* Colors */
+  --mg-bg-dark: #0f172a;
+  --mg-bg-surface: #1e293b;
+  --mg-bg-surface-2: #263044;
+  --mg-border: rgba(148, 163, 184, 0.15);
+  --mg-border-accent: rgba(148, 163, 184, 0.3);
+
+  --mg-text-primary: #f1f5f9;
+  --mg-text-secondary: #94a3b8;
+  --mg-text-muted: #64748b;
+
+  --mg-danger: #ef4444;
+  --mg-danger-dim: rgba(239, 68, 68, 0.12);
+  --mg-danger-glow: rgba(239, 68, 68, 0.4);
+
+  --mg-warning: #f59e0b;
+  --mg-warning-dim: rgba(245, 158, 11, 0.12);
+  --mg-warning-glow: rgba(245, 158, 11, 0.4);
+
+  --mg-success: #22c55e;
+  --mg-success-dim: rgba(34, 197, 94, 0.12);
+
+  --mg-primary: #3b82f6;
+  --mg-primary-dim: rgba(59, 130, 246, 0.15);
+  --mg-primary-glow: rgba(59, 130, 246, 0.4);
+
+  --mg-external-row-bg: rgba(239, 68, 68, 0.06);
+  --mg-external-row-border: rgba(239, 68, 68, 0.35);
+
+  /* Shadows */
+  --mg-shadow-modal: 0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(148, 163, 184, 0.1);
+  --mg-shadow-panel: 0 20px 60px -15px rgba(0, 0, 0, 0.7);
+  --mg-shadow-toast: 0 10px 30px rgba(0, 0, 0, 0.5);
+
+  /* Radii */
+  --mg-radius-sm: 6px;
+  --mg-radius: 12px;
+  --mg-radius-lg: 16px;
+  --mg-radius-xl: 20px;
+
+  /* Z-index layers */
+  --mg-z-shield: 9000;
+  --mg-z-backdrop: 9998;
+  --mg-z-modal: 9999;
+  --mg-z-sandbox: 9997;
+  --mg-z-toast: 10000;
+}
+
+/* ============================================================
+   INBOX ROW — Email cảnh báo External
+   ============================================================ */
+
+tr.mga-external-row,
+tr[data-mg-marked="true"] {
+  background-color: var(--mg-external-row-bg) !important;
+  box-shadow: inset 3px 0 0 var(--mg-danger) !important;
+  transition: background-color 0.3s ease !important;
+}
+
+tr.mga-external-row:hover,
+tr[data-mg-marked="true"]:hover {
+  background-color: rgba(239, 68, 68, 0.12) !important;
+}
+
+.mg-external-row {
+  background-color: var(--mg-external-row-bg) !important;
+  box-shadow: inset 3px 0 0 var(--mg-danger) !important;
+  transition: background-color 0.3s ease, box-shadow 0.3s ease !important;
+  position: relative !important;
+}
+
+.mg-external-row:hover {
+  background-color: rgba(239, 68, 68, 0.1) !important;
+}
+
+/* Badge gắn trên Subject của hàng email External */
+.mg-external-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  margin-right: 8px;
+  border-radius: 4px;
+  background: var(--mg-danger-dim);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--mg-font);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  vertical-align: middle;
+  animation: mg-badge-pulse 2s ease-in-out infinite;
+}
+
+@keyframes mg-badge-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Placeholder cho ảnh bị ẩn trong Sanitized HTML */
+.mg-hidden-image-placeholder {
+  display: inline-block;
+  padding: 4px 10px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px dashed rgba(245, 158, 11, 0.4);
+  border-radius: 4px;
+  color: #fbbf24;
+  font-size: 12px;
+  font-family: var(--mg-font);
+  margin: 2px;
+}
+
+/* Link bị vô hiệu hóa trong Sanitized HTML */
+.mg-removed-link {
+  color: #94a3b8;
+  text-decoration: line-through;
+  cursor: not-allowed;
+  border-bottom: 1px dashed rgba(148, 163, 184, 0.5);
+}
+
+/* ============================================================
+   BACKDROP — Lớp phủ tối phía sau Modal
+   ============================================================ */
+
+.mg-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: var(--mg-z-backdrop);
+  animation: mg-fade-in 0.2s ease;
+}
+
+@keyframes mg-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ============================================================
+   DECISION MODAL
+   ============================================================ */
+
+.mg-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.96);
+  width: min(540px, 92vw);
+  max-height: 90vh;
+  overflow-y: auto;
+  z-index: var(--mg-z-modal);
+  background: var(--mg-bg-surface);
+  border: 1px solid var(--mg-border-accent);
+  border-top: 2px solid var(--mg-danger);
+  border-radius: var(--mg-radius-xl);
+  padding: 28px 32px;
+  box-shadow: var(--mg-shadow-modal);
+  font-family: var(--mg-font);
+  color: var(--mg-text-primary);
+  opacity: 0;
+  transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  scrollbar-width: thin;
+  scrollbar-color: var(--mg-border-accent) transparent;
+}
+
+.mg-modal.mg-modal-enter {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+/* Icon cảnh báo ở đầu Modal */
+.mg-modal-icon {
+  font-size: 40px;
+  text-align: center;
+  margin-bottom: 12px;
+  animation: mg-icon-shake 0.5s cubic-bezier(.36,.07,.19,.97) 0.3s;
+}
+
+@keyframes mg-icon-shake {
+  0%, 100% { transform: rotate(0deg); }
+  20%       { transform: rotate(-8deg); }
+  40%       { transform: rotate(8deg); }
+  60%       { transform: rotate(-4deg); }
+  80%       { transform: rotate(4deg); }
+}
+
+.mg-modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fca5a5;
+  text-align: center;
+  margin: 0 0 20px 0;
+  line-height: 1.4;
+}
+
+.mg-modal-sender,
+.mg-modal-domain-row,
+.mg-modal-subject {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 14px;
+  border-radius: var(--mg-radius-sm);
+  background: var(--mg-bg-surface-2);
+  border: 1px solid var(--mg-border);
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.mg-modal-label {
+  color: var(--mg-text-secondary);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.mg-modal-value {
+  color: var(--mg-text-primary);
+  word-break: break-all;
+}
+
+.mg-value-danger {
+  color: #fca5a5;
+  font-weight: 600;
+}
+
+/* Badge Domain */
+.mg-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.mg-badge-external {
+  background: var(--mg-danger-dim);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+}
+
+.mg-badge-internal {
+  background: var(--mg-success-dim);
+  border: 1px solid rgba(34, 197, 94, 0.5);
+  color: #86efac;
+}
+
+.mg-modal-warning-text {
+  color: var(--mg-text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 16px 0;
+  padding: 12px 16px;
+  background: var(--mg-warning-dim);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  border-left: 3px solid var(--mg-warning);
+  border-radius: var(--mg-radius-sm);
+}
+
+/* Modal Action Buttons */
+.mg-modal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.mg-modal-footer-note {
+  font-size: 11px;
+  color: var(--mg-text-muted);
+  text-align: center;
+  margin-top: 16px;
+  line-height: 1.5;
+}
+
+/* ============================================================
+   BUTTONS
+   ============================================================ */
+
+.mg-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 20px;
+  border-radius: var(--mg-radius-sm);
+  font-family: var(--mg-font);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  letter-spacing: 0.01em;
+  user-select: none;
+  text-decoration: none;
+}
+
+.mg-btn:focus-visible {
+  outline: 2px solid var(--mg-primary);
+  outline-offset: 2px;
+}
+
+/* Primary — Xanh lam (Sandbox) */
+.mg-btn-primary {
+  background: linear-gradient(135deg, #2563eb, #3b82f6);
+  color: #ffffff;
+  border-color: rgba(59, 130, 246, 0.5);
+  box-shadow: 0 0 20px var(--mg-primary-glow);
+}
+.mg-btn-primary:hover {
+  background: linear-gradient(135deg, #1d4ed8, #2563eb);
+  box-shadow: 0 0 30px var(--mg-primary-glow);
+  transform: translateY(-1px);
+}
+.mg-btn-primary:active { transform: translateY(0); }
+
+/* Warning — Vàng hổ phách (Cho phép mở) */
+.mg-btn-warning {
+  background: linear-gradient(135deg, #d97706, #f59e0b);
+  color: #ffffff;
+  border-color: rgba(245, 158, 11, 0.5);
+  box-shadow: 0 0 15px var(--mg-warning-glow);
+}
+.mg-btn-warning:hover {
+  background: linear-gradient(135deg, #b45309, #d97706);
+  box-shadow: 0 0 25px var(--mg-warning-glow);
+  transform: translateY(-1px);
+}
+
+/* Danger — Đỏ (Xóa) */
+.mg-btn-danger {
+  background: linear-gradient(135deg, #dc2626, #ef4444);
+  color: #ffffff;
+  border-color: rgba(239, 68, 68, 0.5);
+  box-shadow: 0 0 15px var(--mg-danger-glow);
+}
+.mg-btn-danger:hover {
+  background: linear-gradient(135deg, #b91c1c, #dc2626);
+  box-shadow: 0 0 25px var(--mg-danger-glow);
+  transform: translateY(-1px);
+}
+
+/* Ghost — Trong suốt (Hủy) */
+.mg-btn-ghost {
+  background: transparent;
+  color: var(--mg-text-secondary);
+  border-color: var(--mg-border-accent);
+}
+.mg-btn-ghost:hover {
+  background: var(--mg-bg-surface-2);
+  color: var(--mg-text-primary);
+  border-color: var(--mg-border-accent);
+}
+
+/* Small variant */
+.mg-btn-sm {
+  padding: 8px 14px;
+  font-size: 13px;
+}
+
+/* ============================================================
+   SANDBOX VIEWER — Panel bên phải hoặc toàn trang
+   ============================================================ */
+
+.mg-sandbox-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: min(760px, 96vw);
+  height: 100vh;
+  z-index: var(--mg-z-sandbox);
+  background: var(--mg-bg-surface);
+  border-left: 1px solid var(--mg-border-accent);
+  border-top: 2px solid var(--mg-primary);
+  box-shadow: var(--mg-shadow-panel);
+  display: flex;
+  flex-direction: column;
+  font-family: var(--mg-font);
+  color: var(--mg-text-primary);
+  transform: translateX(100%);
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.mg-sandbox-panel.mg-sandbox-enter {
+  transform: translateX(0);
+}
+
+/* Sandbox Header */
+.mg-sandbox-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--mg-border);
+  background: linear-gradient(135deg, var(--mg-bg-dark) 0%, var(--mg-bg-surface) 100%);
+  flex-shrink: 0;
+}
+
+.mg-sandbox-header-left {
+  flex: 1;
+  min-width: 0;
+}
+
+.mg-sandbox-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #93c5fd;
+  margin: 0 0 6px 0;
+  line-height: 1.3;
+}
+
+.mg-sandbox-info {
+  font-size: 12px;
+  color: var(--mg-text-secondary);
+  word-break: break-all;
+}
+
+.mg-sandbox-close {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--mg-bg-surface-2);
+  border: 1px solid var(--mg-border-accent);
+  color: var(--mg-text-secondary);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  margin-left: 12px;
+}
+.mg-sandbox-close:hover {
+  background: var(--mg-danger-dim);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+}
+
+/* Tab Bar */
+.mg-tab-bar {
+  display: flex;
+  gap: 0;
+  padding: 12px 16px 0;
+  background: var(--mg-bg-dark);
+  border-bottom: 1px solid var(--mg-border);
+  flex-shrink: 0;
+}
+
+.mg-tab {
+  padding: 8px 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--mg-text-muted);
+  font-family: var(--mg-font);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  margin-bottom: -1px;
+}
+
+.mg-tab:hover {
+  color: var(--mg-text-secondary);
+  background: rgba(148, 163, 184, 0.05);
+}
+
+.mg-tab.mg-tab-active {
+  color: #93c5fd;
+  border-bottom-color: var(--mg-primary);
+  font-weight: 600;
+}
+
+/* Content Area */
+.mg-sandbox-content {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.mg-content-pane {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  padding: 20px 24px;
+  display: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--mg-border-accent) transparent;
+  /* Reset Gmail styles */
+  font-family: var(--mg-font) !important;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--mg-text-primary);
+}
+
+.mg-content-pane.mg-pane-active {
+  display: block;
+}
+
+/* Nội dung Sanitized HTML */
+#mg-pane-html {
+  background: var(--mg-bg-dark);
+}
+
+#mg-pane-html * {
+  max-width: 100%;
+  word-break: break-word;
+}
+
+#mg-pane-html table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13px;
+}
+
+#mg-pane-html td,
+#mg-pane-html th {
+  border: 1px solid var(--mg-border);
+  padding: 6px 10px;
+}
+
+#mg-pane-html th {
+  background: var(--mg-bg-surface);
+  font-weight: 600;
+  color: var(--mg-text-secondary);
+}
+
+/* Plain Text */
+.mg-plain-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--mg-mono);
+  font-size: 13px;
+  line-height: 1.8;
+  color: #d1d5db;
+  background: transparent;
+  margin: 0;
+  border: none;
+  padding: 0;
+}
+
+/* Link List */
+.mg-links-summary {
+  font-size: 13px;
+  color: var(--mg-text-secondary);
+  padding: 8px 0 16px;
+  border-bottom: 1px solid var(--mg-border);
+  margin-bottom: 16px;
+}
+
+.mg-no-links {
+  color: var(--mg-success);
+  font-size: 14px;
+  padding: 20px 0;
+}
+
+.mg-link-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mg-link-item {
+  padding: 12px 14px;
+  background: var(--mg-bg-surface-2);
+  border: 1px solid var(--mg-border);
+  border-radius: var(--mg-radius-sm);
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mg-link-item.mg-link-suspicious {
+  border-color: rgba(239, 68, 68, 0.35);
+  background: var(--mg-danger-dim);
+}
+
+.mg-link-type {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--mg-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.mg-link-text {
+  color: var(--mg-text-primary);
+  font-weight: 500;
+}
+
+.mg-link-href {
+  font-family: var(--mg-mono);
+  color: #6b7280;
+  font-size: 11px;
+  word-break: break-all;
+  background: transparent;
+}
+
+.mg-link-warning {
+  color: #fca5a5;
+  font-weight: 700;
+  font-size: 11px;
+}
+
+/* Sandbox Footer */
+.mg-sandbox-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px 24px;
+  background: var(--mg-bg-dark);
+  border-top: 1px solid var(--mg-border);
+  flex-shrink: 0;
+}
+
+.mg-sandbox-footer-note {
+  font-size: 12px;
+  color: var(--mg-text-muted);
+  line-height: 1.4;
+  flex: 1;
+}
+
+/* ============================================================
+   SHIELD OVERLAY — Phủ lên vùng nội dung email
+   ============================================================ */
+
+.mg-shield-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: var(--mg-z-shield);
+  background: linear-gradient(
+    135deg,
+    rgba(15, 23, 42, 0.97) 0%,
+    rgba(30, 41, 59, 0.95) 100%
+  );
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border: 2px solid rgba(239, 68, 68, 0.3);
+  border-radius: var(--mg-radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: mg-shield-appear 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  min-height: 200px;
+}
+
+@keyframes mg-shield-appear {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.mg-shield-content {
+  text-align: center;
+  padding: 32px 28px;
+  max-width: 400px;
+}
+
+.mg-shield-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  display: block;
+  animation: mg-lock-pulse 2s ease-in-out infinite;
+}
+
+@keyframes mg-lock-pulse {
+  0%, 100% { transform: scale(1); }
+  50%       { transform: scale(1.05); }
+}
+
+.mg-shield-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fca5a5;
+  margin: 0 0 12px 0;
+  line-height: 1.4;
+  font-family: var(--mg-font);
+}
+
+.mg-shield-desc {
+  font-size: 13px;
+  color: var(--mg-text-secondary);
+  line-height: 1.6;
+  margin: 0 0 20px 0;
+  font-family: var(--mg-font);
+}
+
+.mg-shield-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* ============================================================
+   TOAST NOTIFICATIONS — Góc dưới phải
+   ============================================================ */
+
+.mg-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: var(--mg-z-toast);
+  padding: 14px 20px;
+  border-radius: var(--mg-radius);
+  font-family: var(--mg-font);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--mg-text-primary);
+  background: var(--mg-bg-surface);
+  border: 1px solid var(--mg-border-accent);
+  box-shadow: var(--mg-shadow-toast);
+  max-width: 360px;
+  line-height: 1.5;
+  transform: translateY(20px);
+  opacity: 0;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.mg-toast.mg-toast-show {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.mg-toast-info    { border-left: 3px solid var(--mg-primary); }
+.mg-toast-success { border-left: 3px solid var(--mg-success); }
+.mg-toast-warning { border-left: 3px solid var(--mg-warning); }
+.mg-toast-danger  { border-left: 3px solid var(--mg-danger); }
+
+/* ============================================================
+   SCROLLBAR STYLE (Webkit)
+   ============================================================ */
+
+.mg-sandbox-content::-webkit-scrollbar,
+.mg-content-pane::-webkit-scrollbar,
+.mg-modal::-webkit-scrollbar {
+  width: 5px;
+}
+
+.mg-sandbox-content::-webkit-scrollbar-track,
+.mg-content-pane::-webkit-scrollbar-track,
+.mg-modal::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.mg-sandbox-content::-webkit-scrollbar-thumb,
+.mg-content-pane::-webkit-scrollbar-thumb,
+.mg-modal::-webkit-scrollbar-thumb {
+  background: var(--mg-border-accent);
+  border-radius: 3px;
+}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+
+@media (max-width: 600px) {
+  .mg-modal {
+    width: 96vw;
+    padding: 20px 16px;
+  }
+
+  .mg-modal-actions {
+    gap: 8px;
+  }
+
+  .mg-sandbox-panel {
+    width: 100vw;
+  }
+
+  .mg-sandbox-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
