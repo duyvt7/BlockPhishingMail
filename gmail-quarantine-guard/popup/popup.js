@@ -27,7 +27,7 @@ const versionBadge     = document.getElementById('version-badge');
 const popupToast       = document.getElementById('popup-toast');
 
 // Domains mặc định — không cho phép xóa
-const DEFAULT_DOMAINS = ['google.com'];
+const DEFAULT_DOMAINS = ['posco.com', 'posco.vn', 'posco.net', 'posco.co.kr', 'poscoway.net', 'steel-n.com', 'postown.net', 'easythanks-planet.com'];
 
 // ============================================================
 // TOAST
@@ -203,13 +203,24 @@ function renderDomainItem(domain) {
 
 /**
  * Xử lý thêm domain mới.
- * @param {Event} event
+ * @param {Event} [event]
  */
 async function handleAddDomain(event) {
-  event.preventDefault();
+  if (event && typeof event.preventDefault === 'function') {
+    event.preventDefault();
+  }
   clearError();
 
-  const rawInput = domainInput.value;
+  let rawInput = (domainInput.value || '').trim();
+  // Tự động loại bỏ http/https nếu người dùng nhập/dán URL
+  if (rawInput.startsWith('http://') || rawInput.startsWith('https://')) {
+    try {
+      const url = new URL(rawInput);
+      rawInput = url.hostname;
+      domainInput.value = rawInput;
+    } catch (_) {}
+  }
+
   const { valid, normalized, error } = validateDomain(rawInput);
 
   if (!valid) {
@@ -235,7 +246,38 @@ async function handleAddDomain(event) {
     }
   } catch (err) {
     console.error('[Popup] Lỗi khi thêm domain:', err);
-    showError('Lỗi kết nối với Extension. Hãy reload trang Gmail.');
+    showError('Lỗi kết nối với Extension. Hãy reload trang Webmail.');
+  }
+}
+
+/**
+ * Thêm một domain trực tiếp (dùng cho nút gợi ý 1 chạm hoặc preset tags, không cần nhập/dán).
+ * @param {string} domain
+ */
+async function handleAddDomainDirect(domain) {
+  clearError();
+  const { valid, normalized, error } = validateDomain(domain);
+  if (!valid) {
+    showError(error);
+    return;
+  }
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: 'ADD_DOMAIN',
+      payload: { domain: normalized },
+    });
+    if (response && response.success) {
+      if (domainInput) domainInput.value = '';
+      renderDomainList(response.whitelist);
+      showToast(`✅ Đã thêm "${normalized}" vào Whitelist!`, 'success');
+      const suggestedBox = document.getElementById('suggested-box');
+      if (suggestedBox) suggestedBox.style.display = 'none';
+    } else {
+      showError(response?.error || 'Không thể thêm domain.');
+    }
+  } catch (err) {
+    console.error('[Popup] Lỗi khi thêm domain trực tiếp:', err);
+    showError('Lỗi kết nối với Extension.');
   }
 }
 
@@ -291,24 +333,30 @@ async function initPopup() {
     showToast('Lỗi kết nối Service Worker.', 'error');
   }
 
-  // Event listener cho form thêm domain
-  addForm.addEventListener('submit', handleAddDomain);
+  // Event listener cho nút Thêm và phím Enter (không dùng form submit để tránh chặn từ Secure Web)
+  const addBtn = document.getElementById('add-btn');
+  if (addBtn) {
+    addBtn.addEventListener('click', () => handleAddDomain());
+  }
 
-  // Xóa lỗi khi người dùng bắt đầu gõ
+  domainInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleAddDomain();
+    }
+  });
+
+  // Xóa lỗi khi người dùng bắt đầu gõ hoặc đổi nội dung
   domainInput.addEventListener('input', clearError);
-
-  // Hỗ trợ paste URL và tự động chuẩn hóa thành domain
-  domainInput.addEventListener('paste', (e) => {
-    setTimeout(() => {
-      const val = domainInput.value;
-      if (val.startsWith('http://') || val.startsWith('https://')) {
-        try {
-          const url = new URL(val);
-          domainInput.value = url.hostname;
-          clearError();
-        } catch (_) { /* keep original value */ }
-      }
-    }, 0);
+  domainInput.addEventListener('change', () => {
+    let val = domainInput.value.trim();
+    if (val.startsWith('http://') || val.startsWith('https://')) {
+      try {
+        const url = new URL(val);
+        domainInput.value = url.hostname;
+        clearError();
+      } catch (_) {}
+    }
   });
 
   // Lắng nghe thay đổi storage (nếu popup mở khi content script thay đổi whitelist)
@@ -316,6 +364,45 @@ async function initPopup() {
     if (area === 'local' && changes.whitelistDomains) {
       renderDomainList(changes.whitelistDomains.newValue || []);
     }
+  });
+
+  // Kiểm tra gợi ý domain từ email vừa phát hiện
+  try {
+    const storageData = await chrome.storage.local.get(['lastExternalDomain', 'whitelistDomains']);
+    const extDom = storageData.lastExternalDomain;
+    const currentList = storageData.whitelistDomains || DEFAULT_DOMAINS;
+    if (extDom && !currentList.includes(extDom.toLowerCase().trim())) {
+      const suggestedBox = document.getElementById('suggested-box');
+      const suggestedName = document.getElementById('suggested-domain-name');
+      const suggestedBtn = document.getElementById('suggested-add-btn');
+      if (suggestedBox && suggestedName && suggestedBtn) {
+        suggestedName.textContent = extDom;
+        suggestedBox.style.display = 'flex';
+        suggestedBtn.onclick = () => {
+          handleAddDomainDirect(extDom);
+        };
+      }
+    }
+  } catch (_) {}
+
+  // Event listener cho các nút mẫu nhanh (tag-btn)
+  document.querySelectorAll('.tag-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const d = btn.dataset.domain;
+      if (d) handleAddDomainDirect(d);
+    });
+  });
+
+  // Hỗ trợ dán an toàn qua event clipboardData (ngăn lỗi từ hook Secure Web)
+  domainInput.addEventListener('paste', (e) => {
+    try {
+      const text = (e.clipboardData || window.clipboardData)?.getData('text');
+      if (text) {
+        e.preventDefault();
+        domainInput.value = text.trim();
+        clearError();
+      }
+    } catch (_) {}
   });
 }
 

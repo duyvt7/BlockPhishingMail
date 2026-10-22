@@ -39,22 +39,28 @@
       try {
         const response = await chrome.runtime.sendMessage({ type: 'GET_WHITELIST' });
         if (response && response.success) {
-          this._whitelist = response.whitelist.map((d) => d.toLowerCase().trim());
+          this._whitelist = response.whitelist
+            .map((d) => d.toLowerCase().trim())
+            .filter((d) => d !== 'google.com' && d !== 'gmail.com' && !d.endsWith('.google.com'));
           this._loaded = true;
           console.log('[DomainValidator] Đã tải Whitelist:', this._whitelist);
         } else {
           console.warn('[DomainValidator] Không thể tải Whitelist, dùng mặc định.');
-          this._whitelist = ['google.com'];
+          this._whitelist = ['posco.com'];
           this._loaded = true;
         }
       } catch (err) {
         console.error('[DomainValidator] Lỗi khi tải Whitelist:', err);
-        this._whitelist = ['google.com'];
+        this._whitelist = ['posco.com'];
         this._loaded = true;
       }
       return this._whitelist;
     }
 
+    /**
+     * Cập nhật Whitelist nội bộ (được gọi sau khi người dùng thêm/xóa domain).
+     * @param {string[]} newList - Danh sách domain mới
+     */
     /**
      * Cập nhật Whitelist nội bộ (được gọi sau khi người dùng thêm/xóa domain).
      * @param {string[]} newList - Danh sách domain mới
@@ -69,6 +75,7 @@
      *   - "user@domain.com"
      *   - "Display Name <user@domain.com>"
      *   - "user@domain.com (Display Name)"
+     *   - "From: user@domain.com"
      *
      * @param {string} emailStr - Chuỗi địa chỉ email đầu vào
      * @returns {string|null} Domain đã được chuẩn hóa hoặc null nếu không hợp lệ
@@ -78,28 +85,29 @@
 
       let email = emailStr.trim();
 
-      // Xử lý định dạng "Display Name <user@domain.com>"
-      const angleMatch = email.match(/<([^>]+)>/);
-      if (angleMatch) {
-        email = angleMatch[1].trim();
-      }
+      // Ưu tiên trích xuất chính xác email bằng regex
+      const emailRegexMatch = email.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+      if (emailRegexMatch) {
+        email = emailRegexMatch[0];
+      } else {
+        // Fallback xử lý <email> và (comment)
+        const angleMatch = email.match(/<([^>]+)>/);
+        if (angleMatch) email = angleMatch[1].trim();
 
-      // Xử lý định dạng "user@domain.com (Comment)"
-      const parenIndex = email.indexOf('(');
-      if (parenIndex !== -1) {
-        email = email.substring(0, parenIndex).trim();
+        const parenIndex = email.indexOf('(');
+        if (parenIndex !== -1) email = email.substring(0, parenIndex).trim();
       }
 
       const atIndex = email.lastIndexOf('@');
       if (atIndex === -1) return null;
 
-      const domain = email.substring(atIndex + 1).toLowerCase().trim();
+      const domain = email.substring(atIndex + 1).toLowerCase().trim().replace(/\.+$/, '');
       return domain || null;
     }
 
     /**
      * Kiểm tra xem một domain có khớp với một domain trong Whitelist hay không.
-     * Hỗ trợ kiểm tra subdomain: 'mail.google.com' khớp với 'google.com'.
+     * Hỗ trợ kiểm tra subdomain: 'mail.posco.com' khớp với 'posco.com'.
      *
      * @param {string} domain - Domain cần kiểm tra (đã lowercase)
      * @param {string} whitelistedDomain - Domain trong Whitelist (đã lowercase)
@@ -124,6 +132,18 @@
 
       if (!domain) {
         return { isInternal: false, domain: null, matchedRule: null };
+      }
+
+
+
+      // Kiểm tra dải IP nội bộ POSCO: 172.*.*.* và 169.140.*.*
+      if (/^\d{1,3}(\.\d{1,3}){3}$/.test(domain)) {
+        if (/^172\.\d+\.\d+\.\d+$/.test(domain)) {
+          return { isInternal: true, domain, matchedRule: 'IP:172.*.*.*' };
+        }
+        if (/^169\.140\.\d+\.\d+$/.test(domain)) {
+          return { isInternal: true, domain, matchedRule: 'IP:169.140.*.*' };
+        }
       }
 
       for (const rule of this._whitelist) {

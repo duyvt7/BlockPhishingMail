@@ -35,6 +35,40 @@
       "css": ["styles/quarantine.css"],
       "run_at": "document_idle",
       "all_frames": false
+    },
+    {
+      "matches": [
+        "https://*.posco.vn/*",
+        "https://*.posco.net/*",
+        "https://*.posco.com/*",
+        "https://*.posco.co.kr/*",
+        "https://*.poscoway.net/*",
+        "https://*.steel-n.com/*",
+        "https://*.postown.net/*",
+        "https://*.easythanks-planet.com/*",
+        "http://*.posco.vn/*",
+        "http://*.posco.net/*",
+        "http://*.posco.com/*",
+        "http://*.posco.co.kr/*",
+        "http://*.poscoway.net/*",
+        "http://*.steel-n.com/*",
+        "http://*.postown.net/*",
+        "http://*.easythanks-planet.com/*"
+      ],
+      "exclude_matches": [
+        "https://mail.google.com/*"
+      ],
+      "js": [
+        "src/core/domain-validator.js",
+        "src/core/content-sanitizer.js",
+        "src/core/quarantine-ui.js",
+        "src/core/orchestrator.js",
+        "src/adapters/posco.adapter.js",
+        "src/main.js"
+      ],
+      "css": ["styles/quarantine.css"],
+      "run_at": "document_idle",
+      "all_frames": true
     }
   ],
   "permissions": [
@@ -44,7 +78,23 @@
     "activeTab"
   ],
   "host_permissions": [
-    "https://mail.google.com/*"
+    "https://mail.google.com/*",
+    "https://*.posco.vn/*",
+    "https://*.posco.net/*",
+    "https://*.posco.com/*",
+    "https://*.posco.co.kr/*",
+    "https://*.poscoway.net/*",
+    "https://*.steel-n.com/*",
+    "https://*.postown.net/*",
+    "https://*.easythanks-planet.com/*",
+    "http://*.posco.vn/*",
+    "http://*.posco.net/*",
+    "http://*.posco.com/*",
+    "http://*.posco.co.kr/*",
+    "http://*.poscoway.net/*",
+    "http://*.steel-n.com/*",
+    "http://*.postown.net/*",
+    "http://*.easythanks-planet.com/*"
   ],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'"

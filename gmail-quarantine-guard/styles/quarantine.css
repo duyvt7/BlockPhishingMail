@@ -70,53 +70,50 @@
    INBOX ROW — Email cảnh báo External
    ============================================================ */
 
-tr.mga-external-row,
+tr.mg-external-row,
 tr[data-mg-marked="true"] {
-  background-color: var(--mg-external-row-bg) !important;
-  box-shadow: inset 3px 0 0 var(--mg-danger) !important;
-  transition: background-color 0.3s ease !important;
+  background-color: rgba(239, 68, 68, 0.12) !important;
+  box-shadow: inset 4px 0 0 #ef4444 !important;
+  transition: background-color 0.2s ease !important;
 }
 
-tr.mga-external-row:hover,
-tr[data-mg-marked="true"]:hover {
+tr.mg-external-row > td,
+tr[data-mg-marked="true"] > td {
   background-color: rgba(239, 68, 68, 0.12) !important;
 }
 
-.mg-external-row {
-  background-color: var(--mg-external-row-bg) !important;
-  box-shadow: inset 3px 0 0 var(--mg-danger) !important;
-  transition: background-color 0.3s ease, box-shadow 0.3s ease !important;
-  position: relative !important;
+tr.mg-external-row:hover,
+tr[data-mg-marked="true"]:hover,
+tr.mg-external-row:hover > td,
+tr[data-mg-marked="true"]:hover > td {
+  background-color: rgba(239, 68, 68, 0.22) !important;
 }
 
-.mg-external-row:hover {
-  background-color: rgba(239, 68, 68, 0.1) !important;
-}
-
-/* Badge gắn trên Subject của hàng email External */
+/* Badge gắn trên Subject/Sender của hàng email External */
 .mg-external-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  margin-right: 8px;
-  border-radius: 4px;
-  background: var(--mg-danger-dim);
-  border: 1px solid rgba(239, 68, 68, 0.4);
-  color: #fca5a5;
-  font-size: 10px;
-  font-weight: 700;
-  font-family: var(--mg-font);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  vertical-align: middle;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  padding: 3px 8px !important;
+  margin-right: 8px !important;
+  border-radius: 4px !important;
+  background: #ef4444 !important;
+  color: #ffffff !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  font-family: var(--mg-font) !important;
+  letter-spacing: 0.04em !important;
+  text-transform: uppercase !important;
+  white-space: nowrap !important;
+  vertical-align: middle !important;
+  box-shadow: 0 1px 3px rgba(239, 68, 68, 0.5) !important;
+  line-height: 1.2 !important;
   animation: mg-badge-pulse 2s ease-in-out infinite;
 }
 
 @keyframes mg-badge-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(0.98); }
 }
 
 /* Placeholder cho ảnh bị ẩn trong Sanitized HTML */
@@ -286,8 +283,30 @@ tr[data-mg-marked="true"]:hover {
 .mg-modal-actions {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   margin-top: 20px;
+}
+
+/* Hàng ngang chứa 3 nút: Tin cậy | Xóa thư | Mở email */
+.mg-modal-button-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  width: 100%;
+}
+
+.mg-modal-button-row .mg-btn-row-item {
+  padding: 10px 8px;
+  font-size: 13px;
+  white-space: nowrap;
+  text-align: center;
+  justify-content: center;
+}
+
+@media (max-width: 480px) {
+  .mg-modal-button-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 .mg-modal-footer-note {
@@ -338,6 +357,20 @@ tr[data-mg-marked="true"]:hover {
   transform: translateY(-1px);
 }
 .mg-btn-primary:active { transform: translateY(0); }
+
+/* Success — Xanh lục (Tin cậy / Whitelist) */
+.mg-btn-success {
+  background: linear-gradient(135deg, #15803d, #22c55e);
+  color: #ffffff;
+  border-color: rgba(34, 197, 94, 0.5);
+  box-shadow: 0 0 15px rgba(34, 197, 94, 0.35);
+}
+.mg-btn-success:hover {
+  background: linear-gradient(135deg, #166534, #15803d);
+  box-shadow: 0 0 25px rgba(34, 197, 94, 0.5);
+  transform: translateY(-1px);
+}
+.mg-btn-success:active { transform: translateY(0); }
 
 /* Warning — Vàng hổ phách (Cho phép mở) */
 .mg-btn-warning {
@@ -651,6 +684,35 @@ tr[data-mg-marked="true"]:hover {
   color: var(--mg-text-muted);
   line-height: 1.4;
   flex: 1;
+  min-width: 200px;
+}
+
+/* Hàng ngang chứa 3 nút footer Sandbox: Tin cậy | Xóa thư | Mở email */
+.mg-sandbox-footer-actions {
+  display: flex;
+  align-items: center;
+  flex-direction: row;
+  gap: 10px;
+  flex-wrap: nowrap;
+}
+
+.mg-sandbox-footer-actions .mg-btn {
+  padding: 9px 16px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+@media (max-width: 680px) {
+  .mg-sandbox-footer-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .mg-sandbox-footer-actions .mg-btn {
+    padding: 9px 6px;
+    font-size: 12px;
+  }
 }
 
 /* ============================================================

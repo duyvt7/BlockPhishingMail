@@ -174,6 +174,23 @@
     .add-btn:active { transform: translateY(0); }
     .add-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
+    .tag-btn {
+      padding: 3px 8px;
+      background: rgba(59, 130, 246, 0.12);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      border-radius: 6px;
+      color: #93c5fd;
+      font-size: 11px;
+      font-family: var(--font);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .tag-btn:hover {
+      background: rgba(59, 130, 246, 0.25);
+      border-color: #3b82f6;
+      color: #fff;
+    }
+
     /* Error message */
     .error-msg {
       display: none;
@@ -401,12 +418,23 @@
       </div>
     </div>
 
+    <!-- SUGGESTED DOMAIN BANNER -->
+    <div id="suggested-box" style="display: none; margin-bottom: 14px; padding: 10px 14px; background: rgba(34, 197, 94, 0.1); border: 1px dashed rgba(34, 197, 94, 0.4); border-radius: var(--radius); align-items: center; justify-content: space-between;">
+      <div>
+        <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Gợi ý từ Email đang mở</div>
+        <div style="font-size: 13px; font-weight: 700; color: #86efac;" id="suggested-domain-name">gmail.com</div>
+      </div>
+      <button type="button" id="suggested-add-btn" style="padding: 6px 12px; background: #22c55e; border: none; border-radius: 6px; color: #fff; font-weight: 700; font-size: 12px; cursor: pointer; transition: background 0.15s ease;">
+        + Thêm Whitelist
+      </button>
+    </div>
+
     <!-- ADD DOMAIN FORM -->
     <div class="section-title">
       <span>Thêm Domain Mới</span>
     </div>
 
-    <form class="add-form" id="add-form" autocomplete="off">
+    <div class="add-form" id="add-form">
       <input
         type="text"
         class="domain-input"
@@ -416,10 +444,18 @@
         spellcheck="false"
         maxlength="253"
       />
-      <button type="submit" class="add-btn" id="add-btn" aria-label="Thêm domain">
+      <button type="button" class="add-btn" id="add-btn" aria-label="Thêm domain">
         + Thêm
       </button>
-    </form>
+    </div>
+
+    <!-- QUICK PRESET TAGS -->
+    <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: -6px; margin-bottom: 14px; align-items: center;">
+      <span style="font-size: 11px; color: var(--text-muted);">Mẫu nhanh:</span>
+      <button type="button" class="tag-btn" data-domain="gmail.com">+ gmail.com</button>
+      <button type="button" class="tag-btn" data-domain="google.com">+ google.com</button>
+      <button type="button" class="tag-btn" data-domain="outlook.com">+ outlook.com</button>
+    </div>
 
     <p class="error-msg" id="error-msg" role="alert"></p>
 

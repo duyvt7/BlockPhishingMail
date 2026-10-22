@@ -133,34 +133,50 @@
       const btnSandbox = el('button', {
         className: 'mg-btn mg-btn-primary',
         id: 'mg-btn-sandbox',
-        text: '🛡 Xem trong Sandbox (An toàn)',
-        attrs: { title: 'Xem nội dung email đã được khử độc, không có link hay ảnh nguy hiểm' },
+        text: '🛡 Xem trong Sandbox (Khuyên dùng)',
+        attrs: { title: 'Xem nội dung email đã được khử độc an toàn, không có link độc hay tracker' },
       });
       btnSandbox.addEventListener('click', () => {
         if (callbacks.onViewSandbox) callbacks.onViewSandbox();
         this.destroyModal();
       });
 
+      const btnWhitelist = el('button', {
+        className: 'mg-btn mg-btn-success mg-btn-row-item',
+        id: 'mg-btn-whitelist',
+        text: '⭐ Tin cậy',
+        attrs: { title: `Thêm @${emailInfo.domain || 'domain'} vào danh sách an toàn (Whitelist)` },
+      });
+      btnWhitelist.addEventListener('click', () => {
+        if (callbacks.onAddToWhitelist) callbacks.onAddToWhitelist(emailInfo.domain);
+        this.destroyModal();
+      });
+
+      const btnDelete = el('button', {
+        className: 'mg-btn mg-btn-danger mg-btn-row-item',
+        id: 'mg-btn-delete',
+        text: '🗑 Xóa thư',
+        attrs: { title: 'Đánh dấu và xóa email nguy hiểm này' },
+      });
+      btnDelete.addEventListener('click', () => {
+        if (callbacks.onDelete) callbacks.onDelete();
+        this.destroyModal();
+      });
+
       const btnAllow = el('button', {
-        className: 'mg-btn mg-btn-warning',
+        className: 'mg-btn mg-btn-warning mg-btn-row-item',
         id: 'mg-btn-allow',
-        text: '⚠️ Vẫn Mở (Chấp nhận rủi ro)',
-        attrs: { title: 'Mở email như bình thường — KHÔNG khuyến nghị' },
+        text: '⚠️ Mở email',
+        attrs: { title: 'Mở email trực tiếp — KHÔNG khuyến nghị (Chấp nhận rủi ro)' },
       });
       btnAllow.addEventListener('click', () => {
         if (callbacks.onAllowOpen) callbacks.onAllowOpen();
         this.destroyModal();
       });
 
-      const btnDelete = el('button', {
-        className: 'mg-btn mg-btn-danger',
-        id: 'mg-btn-delete',
-        text: '🗑 Xóa Thư Này',
-        attrs: { title: 'Đánh dấu và xóa email nguy hiểm này' },
-      });
-      btnDelete.addEventListener('click', () => {
-        if (callbacks.onDelete) callbacks.onDelete();
-        this.destroyModal();
+      const buttonRow = el('div', {
+        className: 'mg-modal-button-row',
+        children: [btnWhitelist, btnDelete, btnAllow],
       });
 
       const btnCancel = el('button', {
@@ -175,13 +191,13 @@
 
       const actionsEl = el('div', {
         className: 'mg-modal-actions',
-        children: [btnSandbox, btnAllow, btnDelete, btnCancel],
+        children: [btnSandbox, buttonRow, btnCancel],
       });
 
       // Dòng chú thích dưới cùng
       const footerEl = el('p', {
         className: 'mg-modal-footer-note',
-        text: '💡 Bạn có thể thêm domain này vào Whitelist qua biểu tượng extension trên thanh công cụ.',
+        text: `💡 Bấm "⭐ Tin cậy" để thêm @${emailInfo.domain || 'domain'} vào Whitelist và mở thư trực tiếp.`,
       });
 
       this._modal = el('div', {
@@ -306,12 +322,8 @@
         className: 'mg-content-pane mg-pane-active',
         id: 'mg-pane-html',
       });
-      // An toàn: dùng DOMParser để set innerHTML của sanitized HTML
-      // ContentSanitizer đã lọc sạch, đây là sanitized HTML có thể render
-      const sanitizedDoc = new DOMParser().parseFromString(
-        content.sanitizedHTML || '<p>(Không có nội dung)</p>', 'text/html'
-      );
-      paneHTML.appendChild(sanitizedDoc.body);
+      // ContentSanitizer đã lọc sạch toàn bộ thẻ/thuộc tính nguy hiểm
+      paneHTML.innerHTML = content.sanitizedHTML || '<p>(Không có nội dung)</p>';
 
       const paneText = el('div', {
         className: 'mg-content-pane',
@@ -393,15 +405,42 @@
       }
 
       // Footer actions
+      const whitelistBtn = el('button', {
+        className: 'mg-btn mg-btn-success',
+        id: 'mg-sandbox-whitelist-btn',
+        text: '⭐ Tin cậy',
+        attrs: { title: `Thêm @${emailInfo.domain || 'domain'} vào danh sách an toàn (Whitelist)` },
+      });
+      whitelistBtn.addEventListener('click', () => {
+        if (callbacks.onAddToWhitelist) callbacks.onAddToWhitelist(emailInfo.domain);
+        this.destroySandboxViewer();
+      });
+
+      const deleteBtn = el('button', {
+        className: 'mg-btn mg-btn-danger',
+        id: 'mg-sandbox-delete-btn',
+        text: '🗑 Xóa thư',
+        attrs: { title: 'Xóa email này và đóng Sandbox' },
+      });
+      deleteBtn.addEventListener('click', () => {
+        if (callbacks.onDelete) callbacks.onDelete();
+        this.destroySandboxViewer();
+      });
+
       const allowBtn = el('button', {
         className: 'mg-btn mg-btn-warning',
         id: 'mg-sandbox-allow-btn',
-        text: '⚠️ Mở Email Thật Sự (Bỏ Sandbox)',
-        attrs: { title: 'Chuyển sang xem email gốc không được lọc' },
+        text: '⚠️ Mở email',
+        attrs: { title: 'Chuyển sang xem email gốc không qua Sandbox (Chấp nhận rủi ro)' },
       });
       allowBtn.addEventListener('click', () => {
         if (callbacks.onAllowOpen) callbacks.onAllowOpen();
         this.destroySandboxViewer();
+      });
+
+      const footerActions = el('div', {
+        className: 'mg-sandbox-footer-actions',
+        children: [whitelistBtn, deleteBtn, allowBtn],
       });
 
       const sandboxFooter = el('div', {
@@ -411,7 +450,7 @@
             className: 'mg-sandbox-footer-note',
             text: '🛡 Đây là phiên bản đã khử độc. Mọi link, ảnh và script đã bị vô hiệu hóa.',
           }),
-          allowBtn,
+          footerActions,
         ],
       });
 
@@ -558,15 +597,23 @@
       rowElement.classList.add('mg-external-row');
       rowElement.dataset.mgMarked = 'true';
 
-      // Tìm ô tiêu đề email để gắn badge
-      const subjectCell = rowElement.querySelector('.bog') || rowElement.querySelector('td:nth-child(4)');
-      if (subjectCell && !subjectCell.querySelector('.mg-external-badge')) {
+      // Tìm vị trí tốt nhất để gắn badge: ô tiêu đề hoặc cột người gửi
+      const targetCell = rowElement.querySelector('.bog') ||
+                         rowElement.querySelector('td.subject') ||
+                         rowElement.querySelector('.y6') ||
+                         rowElement.querySelector('td.tLft') ||
+                         rowElement.querySelector('td.yX') ||
+                         rowElement.querySelector('td:nth-child(5)') ||
+                         rowElement.querySelector('td:nth-child(4)') ||
+                         rowElement;
+
+      if (targetCell && !rowElement.querySelector('.mg-external-badge')) {
         const badge = el('span', {
           className: 'mg-external-badge',
           text: `⚠ EXTERNAL @${senderDomain || '?'}`,
           attrs: { title: `Email từ domain ngoài Whitelist: @${senderDomain}` },
         });
-        subjectCell.insertBefore(badge, subjectCell.firstChild);
+        targetCell.insertBefore(badge, targetCell.firstChild);
       }
     }
 

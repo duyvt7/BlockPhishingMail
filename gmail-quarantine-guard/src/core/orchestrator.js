@@ -76,13 +76,24 @@
       // Bước 1: Tải Whitelist
       await this.validator.loadWhitelist();
 
-      // Bước 2: Xử lý Inbox hiện tại
-      this._scanInboxRows();
-
-      // Bước 3: Bắt đầu DOM Observer
+      // Bước 2: Bắt đầu DOM Observer trước
       this._startObserver();
 
-      // Bước 4: Lắng nghe khi Whitelist thay đổi từ Popup
+      // Bước 3: Quét Inbox ngay lập tức
+      this._scanInboxRows();
+
+      // Bước 4: Lên lịch quét bổ sung theo nhịp để đồng bộ với SPA rendering bất đồng bộ
+      [400, 1000, 2500, 5000].forEach((delay) => {
+        setTimeout(() => this._scanInboxRows(), delay);
+      });
+
+      // Kiểm tra chế độ đọc email nếu đang mở sẵn một email
+      this._checkAndApplyShield();
+      [500, 1500, 3000].forEach((delay) => {
+        setTimeout(() => this._checkAndApplyShield(), delay);
+      });
+
+      // Bước 5: Lắng nghe khi Whitelist thay đổi từ Popup
       chrome.storage.onChanged.addListener((changes, area) => {
         if (area === 'local' && changes.whitelistDomains) {
           const newList = changes.whitelistDomains.newValue || [];
@@ -114,25 +125,59 @@
 
     /**
      * Xử lý một hàng email trong Inbox:
-     * - Đọc địa chỉ người gửi
+     * - Đọc địa chỉ người gửi (hỗ trợ cả đồng bộ và bất đồng bộ qua extractRowData)
      * - Kiểm tra domain
      * - Nếu External: đánh dấu hàng + chặn click + gửi notification
      *
      * @param {HTMLElement} row - Element hàng email
      */
-    _processInboxRow(row) {
+    async _processInboxRow(row) {
       if (this._processedRows.has(row)) return;
       this._processedRows.add(row);
 
-      const senderEmail = this.adapter.getSenderFromRow(row);
-      if (!senderEmail) return;
+      let senderEmail;
+
+      // Nếu adapter có extractRowData (POSCO) → gọi async để lấy email chính xác
+      if (typeof this.adapter.extractRowData === 'function') {
+        try {
+          const rowData = await this.adapter.extractRowData(row);
+          senderEmail = rowData?.senderEmail || null;
+        } catch (err) {
+          console.warn('[Orchestrator] extractRowData lỗi, fallback sang getSenderFromRow:', err);
+          senderEmail = this.adapter.getSenderFromRow(row);
+        }
+      } else {
+        senderEmail = this.adapter.getSenderFromRow(row);
+      }
+
+      if (!senderEmail) {
+        // Nếu DOM đang được render động, không lưu vào _processedRows mà cho phép thử lại
+        this._processedRows.delete(row);
+        if (!row.dataset.mgRetry) {
+          row.dataset.mgRetry = '1';
+          setTimeout(() => {
+            this._processInboxRow(row);
+          }, 400);
+        }
+        return;
+      }
 
       const { isInternal, domain } = this.validator.isInternal(senderEmail);
 
       if (!isInternal) {
+        // Lưu domain ngoài Whitelist gần nhất để popup có thể gợi ý thêm nhanh 1 chạm
+        if (domain) {
+          try { chrome.storage.local.set({ lastExternalDomain: domain }); } catch (_) {}
+        }
+
         // Đánh dấu hàng là External trong UI
         const subject = this.adapter.getSubjectFromRow(row);
         this.ui.markRowAsExternal(row, domain);
+
+        // Khóa inline onclick/ondblclick nếu adapter hỗ trợ (POSCO)
+        if (typeof this.adapter.lockRow === 'function') {
+          this.adapter.lockRow(row);
+        }
 
         // Gửi System Notification (throttled: chỉ gửi lần đầu)
         if (!row.dataset.mgNotified) {
@@ -154,7 +199,12 @@
       if (row.dataset.mgIntercepted === 'true') return;
       row.dataset.mgIntercepted = 'true';
 
-      row.addEventListener('click', (event) => {
+      const clickHandler = (event) => {
+        // Nếu cờ cho phép click đang bật (ví dụ khi adapter đang fetch hoặc sau khi allow), không chặn
+        if (row.dataset.mgAllowingClick === 'true') {
+          return;
+        }
+
         // Chỉ chặn click vào chính hàng email, không chặn checkbox
         const target = event.target;
         const isCheckbox = target.closest('[data-tooltip="Select"]') || target.type === 'checkbox';
@@ -179,11 +229,35 @@
             this.adapter.deleteEmail(row);
             this.ui.showToast('🗑 Email đã được xóa.', 'success');
           },
+          onAddToWhitelist: async (domain) => {
+            if (!domain) return;
+            try {
+              const res = await chrome.runtime.sendMessage({
+                type: 'ADD_DOMAIN',
+                payload: { domain },
+              });
+              if (res && res.success) {
+                this.validator.updateWhitelist(res.whitelist);
+                this.ui.showToast(`⭐ Đã thêm "@${domain}" vào Whitelist!`, 'success');
+                this.ui.unmarkRow(row);
+                this._removeClickInterceptor(row);
+                this.adapter.openEmail(row);
+              } else {
+                this.ui.showToast(res?.error || 'Không thể thêm domain vào Whitelist.', 'danger');
+              }
+            } catch (err) {
+              console.error('[Orchestrator] Lỗi khi thêm domain vào Whitelist:', err);
+              this.ui.showToast('Lỗi khi thêm domain vào Whitelist.', 'danger');
+            }
+          },
           onCancel: () => {
             console.log('[Orchestrator] Người dùng đã hủy quyết định.');
           },
         });
-      }, true); // capture phase
+      };
+
+      row._mgClickHandler = clickHandler;
+      row.addEventListener('click', clickHandler, true); // capture phase
     }
 
     /**
@@ -191,9 +265,13 @@
      * @param {HTMLElement} row
      */
     _removeClickInterceptor(row) {
-      // Thay thế element bằng bản sao của nó để xóa tất cả listeners
-      const clone = row.cloneNode(true);
-      row.parentNode.replaceChild(clone, row);
+      if (!row) return;
+      if (row._mgClickHandler) {
+        row.removeEventListener('click', row._mgClickHandler, true);
+        delete row._mgClickHandler;
+      }
+      delete row.dataset.mgIntercepted;
+      row.dataset.mgAllowingClick = 'true';
     }
 
     /**
@@ -205,8 +283,22 @@
       this.ui.showToast('🔄 Đang tải nội dung email vào Sandbox...', 'info', 2000);
 
       try {
+        // Tạm thời cho phép click đi qua nếu adapter cần kích hoạt click để tải dữ liệu
+        if (row && row.dataset) {
+          row.dataset.mgAllowingClick = 'true';
+        }
+
         // Lấy nội dung HTML thô của email qua Adapter
         const rawHTML = await this.adapter.fetchEmailHTML(row);
+
+        // Tắt lại cờ
+        if (row && row.dataset) {
+          delete row.dataset.mgAllowingClick;
+        }
+
+        if (!rawHTML || !rawHTML.trim()) {
+          throw new Error('Nội dung email rỗng');
+        }
 
         const sanitizedHTML = this.sanitizer.sanitizeHTML(rawHTML);
         const plainText = this.sanitizer.toPlainText(rawHTML);
@@ -224,11 +316,47 @@
               this._removeClickInterceptor(row);
               this.adapter.openEmail(row);
             },
+            onDelete: () => {
+              if (row && typeof this.adapter.deleteEmail === 'function') {
+                this.adapter.deleteEmail(row);
+                this.ui.showToast('🗑 Email đã được xóa.', 'success');
+              } else if (typeof this.adapter.reportPhishingFromDetail === 'function') {
+                this.adapter.reportPhishingFromDetail();
+                this.ui.showToast('🗑 Đang báo cáo và xóa thư...', 'success');
+              } else {
+                this.ui.showToast('🗑 Đã yêu cầu xóa email.', 'info');
+              }
+            },
+            onAddToWhitelist: async (domain) => {
+              if (!domain) return;
+              try {
+                const res = await chrome.runtime.sendMessage({
+                  type: 'ADD_DOMAIN',
+                  payload: { domain },
+                });
+                if (res && res.success) {
+                  this.validator.updateWhitelist(res.whitelist);
+                  this.ui.showToast(`⭐ Đã thêm "@${domain}" vào Whitelist!`, 'success');
+                  if (row) {
+                    this.ui.unmarkRow(row);
+                    this._removeClickInterceptor(row);
+                    this.adapter.openEmail(row);
+                  }
+                } else {
+                  this.ui.showToast(res?.error || 'Không thể thêm domain.', 'danger');
+                }
+              } catch (err) {
+                console.error('[Orchestrator] Lỗi khi thêm domain vào Whitelist:', err);
+              }
+            },
           }
         );
       } catch (err) {
+        if (row && row.dataset) {
+          delete row.dataset.mgAllowingClick;
+        }
         console.error('[Orchestrator] Lỗi khi tải email vào Sandbox:', err);
-        this.ui.showToast('❌ Không thể tải nội dung email vào Sandbox.', 'danger');
+        this.ui.showToast('❌ Không thể tải nội dung email vào Sandbox: ' + (err.message || 'Lỗi không xác định'), 'danger');
       }
     }
 
@@ -241,15 +369,26 @@
      * Nếu có, kiểm tra người gửi và gắn Shield nếu là External.
      */
     async _checkAndApplyShield() {
+      // Loại trừ khiên khóa (Shield Overlay) trên POSCO Webmail theo yêu cầu người dùng
+      if (this.adapter.name === 'PoscoAdapter' || this.adapter.isPosco) {
+        this.ui.detachShield();
+        document.querySelectorAll('#mg-shield-overlay, .mg-shield-overlay').forEach(el => el.remove());
+        return;
+      }
+
       const contentArea = this.adapter.getEmailContentArea();
       if (!contentArea || contentArea === this._currentContentArea) return;
+
+      const senderEmail = this.adapter.getCurrentEmailSender();
+      if (!senderEmail) {
+        // Nếu DOM đang load, không ghi nhận _currentContentArea mà lên lịch thử lại
+        setTimeout(() => this._checkAndApplyShield(), 300);
+        return;
+      }
 
       this._currentContentArea = contentArea;
       this._shieldActive = false;
       this.ui.detachShield();
-
-      const senderEmail = this.adapter.getCurrentEmailSender();
-      if (!senderEmail) return;
 
       const { isInternal, domain } = this.validator.isInternal(senderEmail);
 
@@ -260,7 +399,9 @@
         this._shieldActive = true;
         this.ui.attachShield(contentArea, { sender: senderEmail, subject, domain }, {
           onViewSandbox: async () => {
-            const rawHTML = contentArea.innerHTML;
+            let rawHTML = (typeof this.adapter._extractContentAreaHTML === 'function')
+              ? this.adapter._extractContentAreaHTML(contentArea)
+              : contentArea.innerHTML;
             const sanitizedHTML = this.sanitizer.sanitizeHTML(rawHTML);
             const plainText = this.sanitizer.toPlainText(rawHTML);
             const links = this.sanitizer.extractLinks(rawHTML);
@@ -273,6 +414,30 @@
                 onAllowOpen: () => {
                   this.ui.detachShield();
                   this._shieldActive = false;
+                },
+                onDelete: () => {
+                  if (typeof this.adapter.reportPhishingFromDetail === 'function') {
+                    this.adapter.reportPhishingFromDetail();
+                  } else if (typeof this.adapter.deleteEmail === 'function') {
+                    this.adapter.deleteEmail();
+                  }
+                  this.ui.detachShield();
+                  this.ui.showToast('🗑 Đang báo cáo và xóa thư...', 'success');
+                },
+                onAddToWhitelist: async (dom) => {
+                  if (!dom) return;
+                  try {
+                    const res = await chrome.runtime.sendMessage({
+                      type: 'ADD_DOMAIN',
+                      payload: { domain: dom },
+                    });
+                    if (res && res.success) {
+                      this.validator.updateWhitelist(res.whitelist);
+                      this.ui.showToast(`⭐ Đã thêm "@${dom}" vào Whitelist!`, 'success');
+                      this.ui.detachShield();
+                      this._shieldActive = false;
+                    }
+                  } catch (_) {}
                 },
               }
             );
@@ -322,8 +487,15 @@
           for (const node of mutation.addedNodes) {
             if (node.nodeType !== Node.ELEMENT_NODE) continue;
 
-            // Kiểm tra xem node mới có phải là hàng email Inbox không
-            if (this.adapter.isInboxRow(node)) {
+            // Kiểm tra xem node mới có phải là hàng email Inbox hoặc container chứa hàng không
+            if (
+              this.adapter.isInboxRow(node) ||
+              (node.querySelector && (
+                node.querySelector('tr.zA') ||
+                node.querySelector('table#mailList_inbox') ||
+                node.querySelector('input[type="checkbox"][name]')
+              ))
+            ) {
               hasNewRows = true;
             }
             // Kiểm tra xem có vùng đọc email mới xuất hiện không

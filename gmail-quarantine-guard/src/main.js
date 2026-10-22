@@ -2,15 +2,16 @@
  * @file main.js
  * @description Điểm khởi chạy của Extension.
  *
- * Vai trò: Khởi tạo GmailAdapter và Orchestrator, sau đó gọi init().
- * File này là "glue code" kết nối mọi thứ lại với nhau.
+ * Vai trò: Tự động nhận diện nền tảng Webmail (Gmail hoặc POSCO) dựa trên URL,
+ * khởi tạo Adapter phù hợp và truyền vào Orchestrator.
  *
  * Thứ tự khởi chạy (đảm bảo bởi manifest.json content_scripts):
  *   1. domain-validator.js    → window.MailGuard.DomainValidator
  *   2. content-sanitizer.js   → window.MailGuard.ContentSanitizer
  *   3. quarantine-ui.js       → window.MailGuard.QuarantineUI
  *   4. orchestrator.js        → window.MailGuard.Orchestrator
- *   5. gmail.adapter.js       → window.MailGuard.GmailAdapter
+ *   5. gmail.adapter.js       → window.MailGuard.GmailAdapter     (chỉ trên Gmail)
+ *      HOẶC posco.adapter.js  → window.MailGuard.PoscoAdapter     (chỉ trên POSCO)
  *   6. main.js                → Khởi tạo và chạy
  */
 
@@ -18,37 +19,87 @@
   'use strict';
 
   /**
+   * Nhận diện nền tảng Webmail dựa trên URL hiện tại.
+   * @returns {'gmail'|'posco'|null}
+   */
+  function detectPlatform() {
+    const hostname = window.location.hostname;
+    const pathname = window.location.pathname;
+    const href = window.location.href;
+
+    // Gmail
+    if (hostname.includes('mail.google.com')) {
+      return 'gmail';
+    }
+
+    // POSCO Webmail: URL chứa .nsf, hoặc hostname chứa 'posco', hoặc thuộc dải IP nội bộ
+    if (
+      pathname.includes('.nsf') ||
+      hostname.includes('posco') ||
+      hostname.includes('poscoway') ||
+      hostname.includes('steel-n.com') ||
+      hostname.includes('postown.net') ||
+      hostname.includes('easythanks-planet.com') ||
+      /^172\.\d+\.\d+\.\d+$/.test(hostname) ||
+      /^169\.140\.\d+\.\d+$/.test(hostname)
+    ) {
+      return 'posco';
+    }
+
+    return null;
+  }
+
+  /**
    * Hàm khởi tạo chính.
    * Được bọc trong IIFE để không gây ô nhiễm global scope.
    */
   async function bootstrap() {
-    // Kiểm tra xem đang chạy trên đúng trang Gmail không
-    if (!window.location.hostname.includes('mail.google.com')) {
-      console.warn('[QuarantineGuard] Không phải trang Gmail. Bỏ qua khởi tạo.');
+    if (global.MailGuard._orchestrator) {
+      console.warn('[QuarantineGuard] Orchestrator đã tồn tại, bỏ qua khởi tạo trùng lặp.');
       return;
     }
 
-    // Kiểm tra tất cả các module đã được tải chưa
-    const requiredModules = [
+    const platform = detectPlatform();
+
+    if (!platform) {
+      console.warn('[QuarantineGuard] Không nhận diện được nền tảng Webmail. Bỏ qua khởi tạo.');
+      return;
+    }
+
+    // Kiểm tra các module Core đã được tải chưa
+    const coreModules = [
       'DomainValidator',
       'ContentSanitizer',
       'QuarantineUI',
       'Orchestrator',
-      'GmailAdapter',
     ];
 
-    const missing = requiredModules.filter((m) => !global.MailGuard?.[m]);
-    if (missing.length > 0) {
-      console.error('[QuarantineGuard] Thiếu các module:', missing.join(', '));
+    const missingCore = coreModules.filter((m) => !global.MailGuard?.[m]);
+    if (missingCore.length > 0) {
+      console.error('[QuarantineGuard] Thiếu các module Core:', missingCore.join(', '));
       return;
     }
 
-    try {
-      // Tạo Adapter cho Gmail
-      const gmailAdapter = new global.MailGuard.GmailAdapter();
+    // Chọn Adapter dựa trên platform
+    let adapter;
 
-      // Tạo Orchestrator với Adapter
-      const orchestrator = new global.MailGuard.Orchestrator(gmailAdapter);
+    if (platform === 'gmail') {
+      if (!global.MailGuard.GmailAdapter) {
+        console.error('[QuarantineGuard] GmailAdapter chưa được tải.');
+        return;
+      }
+      adapter = new global.MailGuard.GmailAdapter();
+    } else if (platform === 'posco') {
+      if (!global.MailGuard.PoscoAdapter) {
+        console.error('[QuarantineGuard] PoscoAdapter chưa được tải.');
+        return;
+      }
+      adapter = new global.MailGuard.PoscoAdapter();
+    }
+
+    try {
+      // Tạo Orchestrator với Adapter đã chọn
+      const orchestrator = new global.MailGuard.Orchestrator(adapter);
 
       // Khởi tạo — tải Whitelist và bắt đầu quan sát DOM
       await orchestrator.init();
@@ -57,8 +108,11 @@
       global.MailGuard._orchestrator = orchestrator;
 
       console.log(
-        '%c[QuarantineGuard] Đã khởi động thành công! 🛡',
+        `%c[QuarantineGuard] Đã khởi động thành công trên ${platform.toUpperCase()}! 🛡`,
         'color: #22c55e; font-weight: bold; font-size: 14px;'
+      );
+      console.log(
+        '[QuarantineGuard] Adapter:', adapter.name
       );
       console.log(
         '[QuarantineGuard] Whitelist hiện tại:',
@@ -70,14 +124,13 @@
     }
   }
 
-  // Đợi Gmail DOM được load hoàn toàn trước khi chạy
-  // Gmail là SPA, nên document.readyState thường đã là 'complete' khi content script chạy
+  // Đợi DOM được load hoàn toàn trước khi chạy
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', bootstrap);
   } else {
-    // DOM đã sẵn sàng, nhưng Gmail có thể vẫn đang khởi tạo
-    // Dùng setTimeout nhỏ để đảm bảo Gmail đã render xong cấu trúc ban đầu
+    // DOM đã sẵn sàng, dùng setTimeout nhỏ để đảm bảo render xong cấu trúc ban đầu
     setTimeout(bootstrap, 500);
   }
 
 })(window);
+

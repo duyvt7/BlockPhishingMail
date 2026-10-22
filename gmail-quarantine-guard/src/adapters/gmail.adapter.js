@@ -147,29 +147,35 @@
     getSenderFromRow(row) {
       if (!row) return null;
 
-      // Thử selector ưu tiên
-      const senderSelectors = [
-        '[email]',
-        '[data-hovercard-id]',
-        '.zF',
-        'td.yX span',
-        '.bA4 span',
+      // 1. Quét tất cả các phần tử ứng viên trong cột người gửi (td.yX) và hàng
+      const candidateElements = [
+        ...row.querySelectorAll('td.yX [email], td.yX [data-hovercard-id], td.yX span, td.yX div, [email], [data-hovercard-id], .zF, .yP, .bA4')
       ];
 
-      for (const selector of senderSelectors) {
-        const el = row.querySelector(selector);
-        if (el) {
-          // Ưu tiên lấy từ attribute email
-          const emailAttr = el.getAttribute('email') || el.getAttribute('data-hovercard-id');
-          if (emailAttr && emailAttr.includes('@')) {
-            return emailAttr.trim();
-          }
-          // Thử từ text content (có thể là email)
-          const text = el.textContent.trim();
-          if (text.includes('@')) {
-            return text;
+      for (const el of candidateElements) {
+        // Kiểm tra các thuộc tính có thể chứa email
+        for (const attr of ['email', 'data-hovercard-id', 'title', 'aria-label', 'name', 'data-tooltip']) {
+          const val = el.getAttribute(attr);
+          if (val && val.includes('@')) {
+            const match = val.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+            if (match) return match[0].toLowerCase().trim();
           }
         }
+
+        // Kiểm tra textContent
+        const text = (el.textContent || '').trim();
+        if (text.includes('@')) {
+          const match = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+          if (match) return match[0].toLowerCase().trim();
+        }
+      }
+
+      // 2. Quét toàn bộ HTML của ô người gửi (td.yX)
+      const senderTd = row.querySelector('td.yX') || row;
+      const tdHtml = senderTd.innerHTML || '';
+      const emailMatch = tdHtml.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+      if (emailMatch) {
+        return emailMatch[0].toLowerCase().trim();
       }
 
       return null;
@@ -193,7 +199,7 @@
      */
     isInboxRow(node) {
       if (!node || node.nodeType !== Node.ELEMENT_NODE) return false;
-      return node.matches?.(GMAIL_SELECTORS.INBOX_ROW) || false;
+      return node.matches?.(GMAIL_SELECTORS.INBOX_ROW) || !!node.querySelector?.(GMAIL_SELECTORS.INBOX_ROW);
     }
 
     // ----------------------------------------------------------
@@ -244,14 +250,37 @@
      * @returns {string|null}
      */
     getCurrentEmailSender() {
+      // 1. Kiểm tra phần tử người gửi chính
       const senderEl = document.querySelector(GMAIL_SELECTORS.CURRENT_SENDER);
-      if (!senderEl) return null;
+      if (senderEl) {
+        for (const attr of ['email', 'data-hovercard-id', 'title', 'aria-label']) {
+          const val = senderEl.getAttribute(attr);
+          if (val && val.includes('@')) {
+            const match = val.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+            if (match) return match[0].toLowerCase().trim();
+          }
+        }
+        const text = senderEl.textContent.trim();
+        if (text.includes('@')) {
+          const match = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+          if (match) return match[0].toLowerCase().trim();
+        }
+      }
 
-      const emailAttr = senderEl.getAttribute('email');
-      if (emailAttr) return emailAttr.trim();
+      // 2. Quét vùng header email (gE, adn, gs, gD, go)
+      const headerArea = document.querySelector('.gE, .adn, .gs');
+      if (headerArea) {
+        const candidate = headerArea.querySelector('[email], [data-hovercard-id], span.go, span.gD');
+        if (candidate) {
+          const val = candidate.getAttribute('email') || candidate.getAttribute('data-hovercard-id') || candidate.textContent;
+          if (val && val.includes('@')) {
+            const match = val.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+            if (match) return match[0].toLowerCase().trim();
+          }
+        }
+      }
 
-      const text = senderEl.textContent.trim();
-      return text.includes('@') ? text : null;
+      return null;
     }
 
     /**
@@ -271,21 +300,34 @@
      * Lấy HTML thô của email từ DOM để đưa vào Sandbox.
      *
      * Chiến lược:
-     *   1. Mở email (nếu chưa mở) bằng cách click vào hàng
+     *   1. Mở email bằng cách click vào hàng
      *   2. Đợi vùng nội dung xuất hiện
      *   3. Lấy innerHTML của vùng nội dung
      *   4. Đóng email (điều hướng trở lại Inbox)
-     *
-     * QUAN TRỌNG: Do Gmail load email động, đây là thao tác async.
+     *   5. Fallback snippet nếu timeout.
      *
      * @param {HTMLElement} row - Hàng email
      * @returns {Promise<string>} HTML thô của email
      */
     async fetchEmailHTML(row) {
-      return new Promise((resolve, reject) => {
+      return new Promise((resolve) => {
+        // Cho phép click này đi qua click interceptor
+        row.dataset.mgAllowingClick = 'true';
+
         const timeout = setTimeout(() => {
-          reject(new Error('Timeout: Không thể tải nội dung email sau 10 giây.'));
-        }, 10000);
+          if (observer) observer.disconnect();
+          delete row.dataset.mgAllowingClick;
+          const snippet = row.querySelector('.y2')?.textContent?.trim() || '';
+          const subject = this.getSubjectFromRow(row) || '';
+          console.warn('[GmailAdapter] Timeout khi tải nội dung email, sử dụng snippet fallback.');
+          resolve(
+            `<div style="padding: 12px; font-family: sans-serif;">` +
+            `<p style="color: #64748b;">(Không thể tải trước toàn bộ DOM chi tiết từ Gmail trong nền. Hiển thị nội dung xem trước:)</p>` +
+            `<h3 style="margin: 8px 0;">${subject}</h3>` +
+            `<div style="padding: 12px; background: rgba(0,0,0,0.05); border-radius: 6px; line-height: 1.5;">${snippet || '(Không có nội dung tóm tắt)'}</div>` +
+            `</div>`
+          );
+        }, 8000);
 
         // Observer để đợi vùng nội dung email xuất hiện
         const observer = new MutationObserver(() => {
@@ -293,10 +335,10 @@
           if (contentArea && contentArea.innerHTML.trim()) {
             clearTimeout(timeout);
             observer.disconnect();
+            delete row.dataset.mgAllowingClick;
             const html = contentArea.innerHTML;
 
             // Điều hướng trở lại Inbox sau khi lấy được HTML
-            // (Người dùng sẽ thấy Sandbox Viewer thay vì email thật)
             setTimeout(() => {
               window.history.back();
             }, 100);
@@ -308,9 +350,18 @@
         observer.observe(document.body, { childList: true, subtree: true });
 
         // Click vào hàng email để mở nó
-        // Tìm phần tử có thể click được (không phải checkbox)
-        const clickTarget = row.querySelector('.bog, .y6, td:nth-child(4)') || row;
-        clickTarget.click();
+        const clickTarget = row.querySelector('.bog, .y6, td:nth-child(4), td:nth-child(5)') || row;
+        ['mousedown', 'mouseup', 'click'].forEach(type => {
+          clickTarget.dispatchEvent(new MouseEvent(type, {
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+            view: window,
+          }));
+        });
+        if (typeof clickTarget.click === 'function') {
+          clickTarget.click();
+        }
       });
     }
 
@@ -321,12 +372,19 @@
      */
     openEmail(row) {
       if (!row) return;
-      const clickTarget = row.querySelector('.bog, td:nth-child(4)') || row;
-      clickTarget.dispatchEvent(new MouseEvent('click', {
-        bubbles: true,
-        cancelable: true,
-        view: window,
-      }));
+      row.dataset.mgAllowingClick = 'true';
+      const clickTarget = row.querySelector('.bog, .y6, td:nth-child(4), td:nth-child(5)') || row;
+      ['mousedown', 'mouseup', 'click'].forEach(type => {
+        clickTarget.dispatchEvent(new MouseEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          view: window,
+        }));
+      });
+      if (typeof clickTarget.click === 'function') {
+        clickTarget.click();
+      }
     }
 
     /**

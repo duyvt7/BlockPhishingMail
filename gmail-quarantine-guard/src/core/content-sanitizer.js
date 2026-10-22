@@ -20,11 +20,10 @@
   // CONSTANTS - Tags & Attributes bị cấm
   // ============================================================
 
-  /** Các thẻ HTML nguy hiểm cần loại bỏ hoàn toàn cùng nội dung của chúng */
+  /** Các thẻ HTML nguy hiểm cần loại bỏ hoàn toàn cùng nội dung của chúng (chỉ code/script) */
   const DANGEROUS_TAGS_REMOVE_CONTENT = new Set([
-    'script', 'style', 'noscript', 'template', 'iframe', 'frame',
-    'frameset', 'object', 'embed', 'applet', 'form', 'input',
-    'button', 'select', 'textarea', 'meta', 'link',
+    'script', 'style', 'noscript', 'template', 'object', 'embed', 'applet',
+    'meta', 'link',
   ]);
 
   /** Các thẻ HTML chứa media/link cần loại bỏ thẻ nhưng GIỮ text content */
@@ -249,9 +248,9 @@
       const links = [];
       const seen = new Set();
 
-      // Lấy tất cả thẻ <a>
+      // 1. Lấy tất cả thẻ <a> có href
       for (const anchor of doc.querySelectorAll('a[href]')) {
-        const href = anchor.getAttribute('href') || '';
+        const href = (anchor.getAttribute('href') || '').trim();
         const text = (anchor.textContent || href).trim();
         if (href && !seen.has(href)) {
           seen.add(href);
@@ -264,9 +263,9 @@
         }
       }
 
-      // Tìm URL trong các attribute khác (src của img, ...)
+      // 2. Tìm URL trong các attribute khác (src của img, ...)
       for (const el of doc.querySelectorAll('[src]')) {
-        const src = el.getAttribute('src') || '';
+        const src = (el.getAttribute('src') || '').trim();
         if (src && !seen.has(src) && !src.startsWith('cid:')) {
           seen.add(src);
           links.push({
@@ -274,6 +273,25 @@
             href: src,
             type: 'media',
             isSuspicious: this._isSuspiciousUrl(src),
+          });
+        }
+      }
+
+      // 3. Quét tất cả URL dạng text thuần (ví dụ: https://vnexpress.net/ không có thẻ <a>)
+      const textContent = doc.body ? (doc.body.textContent || '') : '';
+      const urlRegex = /(?:https?:\/\/|www\.)[a-zA-Z0-9][-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b[-a-zA-Z0-9()@:%_\+.~#?&//=]*/gi;
+      let textMatch;
+      while ((textMatch = urlRegex.exec(textContent)) !== null) {
+        const rawUrl = textMatch[0].trim();
+        const normalizedHref = rawUrl.startsWith('www.') ? `https://${rawUrl}` : rawUrl;
+        if (!seen.has(normalizedHref) && !seen.has(rawUrl)) {
+          seen.add(normalizedHref);
+          seen.add(rawUrl);
+          links.push({
+            text: rawUrl.substring(0, 100),
+            href: normalizedHref,
+            type: 'plain_url',
+            isSuspicious: this._isSuspiciousUrl(normalizedHref),
           });
         }
       }
@@ -291,6 +309,10 @@
       const lower = url.toLowerCase();
       // javascript:, data:, vbscript:
       if (/^(javascript|data|vbscript):/.test(lower)) return true;
+      // Giao thức nội bộ POSCO (đánh dấu suspicious để cảnh báo người dùng)
+      if (/^(fssoexcast|fastdown|fexdown|n3ae00-front|m8a-jnlp):/.test(lower)) return true;
+      // Cảnh báo link .pdf (do policy AlwaysOpenPdfExternally trên POSCO)
+      if (/\.pdf(\?|#|$)/i.test(lower)) return true;
       // URL rút gọn phổ biến
       const shortenerDomains = ['bit.ly', 'tinyurl.com', 't.co', 'goo.gl', 'ow.ly', 'short.io', 'rb.gy'];
       try {
