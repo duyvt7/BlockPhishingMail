@@ -63,6 +63,8 @@
         "src/core/content-sanitizer.js",
         "src/core/quarantine-ui.js",
         "src/core/orchestrator.js",
+        "src/adapters/posco-domino-fetcher.js",
+        "src/adapters/posco-spam-reporter.js",
         "src/adapters/posco.adapter.js",
         "src/main.js"
       ],

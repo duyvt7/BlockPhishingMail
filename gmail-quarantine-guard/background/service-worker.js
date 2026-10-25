@@ -47,13 +47,61 @@ chrome.runtime.onStartup.addListener(async () => {
 // MESSAGE LISTENER
 // ============================================================
 
+// ============================================================
+// NOTIFICATION THROTTLING & AGGREGATION
+// ============================================================
+
+let notificationQueue = [];
+let notificationTimer = null;
+const NOTIFICATION_DEBOUNCE_MS = 1500;
+
+function flushNotifications() {
+  if (notificationQueue.length === 0) return;
+
+  if (notificationQueue.length === 1) {
+    const item = notificationQueue[0];
+    const notifId = `quarantine-guard-${Date.now()}`;
+    chrome.notifications.create(notifId, {
+      type: 'basic',
+      iconUrl: item.iconUrl || chrome.runtime.getURL('icons/icon48.png'),
+      title: item.title || '[Quarantine Guard] Cảnh báo',
+      message: item.message || 'Đã phát hiện email ngoài Whitelist.',
+      priority: 2,
+    });
+  } else {
+    const count = notificationQueue.length;
+    const notifId = `quarantine-guard-summary-${Date.now()}`;
+
+    // Lấy danh sách trích dẫn người gửi để tóm tắt
+    const summaryLines = notificationQueue.slice(0, 3).map((item) => {
+      const match = item.message ? item.message.match(/Từ:\s*([^\n]+)/) : null;
+      return match ? `• ${match[1].trim()}` : `• ${item.title || 'Email ngoài danh sách'}`;
+    });
+
+    if (count > 3) {
+      summaryLines.push(`• ...và ${count - 3} email khác`);
+    }
+
+    chrome.notifications.create(notifId, {
+      type: 'basic',
+      iconUrl: chrome.runtime.getURL('icons/icon48.png'),
+      title: `⚠️ [Quarantine Guard] Phát hiện ${count} email ngoài Whitelist`,
+      message: `Phát hiện ${count} email từ người gửi ngoài danh sách an toàn trong Inbox:\n${summaryLines.join('\n')}`,
+      priority: 2,
+    });
+  }
+
+  notificationQueue = [];
+  notificationTimer = null;
+}
+
 /**
  * Lắng nghe và xử lý các message từ Content Script.
  * Các loại message được hỗ trợ:
  *   - GET_WHITELIST      : Trả về danh sách Whitelist hiện tại
  *   - ADD_DOMAIN         : Thêm một domain vào Whitelist
  *   - REMOVE_DOMAIN      : Xóa một domain khỏi Whitelist
- *   - SEND_NOTIFICATION  : Gửi Chrome System Notification
+ *   - SEND_NOTIFICATION  : Gửi Chrome System Notification (có throttle/aggregate)
  */
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const handler = async () => {
@@ -90,16 +138,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
 
         case 'SEND_NOTIFICATION': {
-          const { title, message: body, iconUrl } = message.payload;
-          const notifId = `quarantine-guard-${Date.now()}`;
-          await chrome.notifications.create(notifId, {
-            type: 'basic',
-            iconUrl: iconUrl || chrome.runtime.getURL('icons/icon48.png'),
-            title: title || '[Quarantine Guard] Cảnh báo',
-            message: body || 'Đã phát hiện email ngoài Whitelist.',
-            priority: 2,
+          const { title, message: body, iconUrl } = message.payload || {};
+          notificationQueue.push({
+            title,
+            message: body,
+            iconUrl,
+            timestamp: Date.now(),
           });
-          return { success: true, notifId };
+
+          if (notificationTimer) {
+            clearTimeout(notificationTimer);
+          }
+          notificationTimer = setTimeout(flushNotifications, NOTIFICATION_DEBOUNCE_MS);
+
+          return { success: true, queued: true };
         }
 
         default:

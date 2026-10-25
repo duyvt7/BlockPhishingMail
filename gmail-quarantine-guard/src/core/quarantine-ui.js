@@ -350,8 +350,9 @@
         const linkList = el('ul', { className: 'mg-link-list' });
         for (const link of content.links) {
           const suspiciousClass = link.isSuspicious ? 'mg-link-suspicious' : '';
+          const homographClass = link.isHomograph ? 'mg-link-homograph' : '';
           const linkItem = el('li', {
-            className: `mg-link-item ${suspiciousClass}`,
+            className: `mg-link-item ${suspiciousClass} ${homographClass}`.trim(),
             children: [
               el('span', {
                 className: 'mg-link-type',
@@ -366,7 +367,13 @@
                 text: link.href,
               }),
               link.isSuspicious
-                ? el('span', { className: 'mg-link-warning', text: '⚠️ NGHI NGỜ' })
+                ? el('span', {
+                    className: 'mg-link-warning',
+                    text: link.isHomograph ? '⚠️ HOMOGRAPH SPOOF' : '⚠️ NGHI NGỜ',
+                    title: link.isHomograph
+                      ? 'Cảnh báo: Domain sử dụng ký tự đồng hình (Cyrillic/Greek/Punycode) để giả mạo thương hiệu!'
+                      : 'Link có dấu hiệu không an toàn',
+                  })
                 : null,
             ],
           });

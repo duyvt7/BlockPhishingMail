@@ -41,7 +41,7 @@
         if (response && response.success) {
           this._whitelist = response.whitelist
             .map((d) => d.toLowerCase().trim())
-            .filter((d) => d !== 'google.com' && d !== 'gmail.com' && !d.endsWith('.google.com'));
+            .filter((d) => d.length > 0);
           this._loaded = true;
           console.log('[DomainValidator] Đã tải Whitelist:', this._whitelist);
         } else {
@@ -57,10 +57,6 @@
       return this._whitelist;
     }
 
-    /**
-     * Cập nhật Whitelist nội bộ (được gọi sau khi người dùng thêm/xóa domain).
-     * @param {string[]} newList - Danh sách domain mới
-     */
     /**
      * Cập nhật Whitelist nội bộ (được gọi sau khi người dùng thêm/xóa domain).
      * @param {string[]} newList - Danh sách domain mới

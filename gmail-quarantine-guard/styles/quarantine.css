@@ -639,6 +639,12 @@ tr[data-mg-marked="true"]:hover > td {
   background: var(--mg-danger-dim);
 }
 
+.mg-link-item.mg-link-homograph {
+  border-color: #ef4444 !important;
+  background: rgba(239, 68, 68, 0.22) !important;
+  box-shadow: inset 3px 0 0 #ef4444;
+}
+
 .mg-link-type {
   font-size: 10px;
   font-weight: 700;
