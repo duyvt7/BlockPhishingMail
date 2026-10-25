@@ -20,10 +20,11 @@
   // CONSTANTS - Tags & Attributes bị cấm
   // ============================================================
 
-  /** Các thẻ HTML nguy hiểm cần loại bỏ hoàn toàn cùng nội dung của chúng (chỉ code/script) */
+  /** Các thẻ HTML nguy hiểm cần loại bỏ hoàn toàn cùng nội dung của chúng (tránh XSS, mXSS, Iframe, Form injection) */
   const DANGEROUS_TAGS_REMOVE_CONTENT = new Set([
     'script', 'style', 'noscript', 'template', 'object', 'embed', 'applet',
-    'meta', 'link',
+    'meta', 'link', 'base', 'iframe', 'frame', 'frameset', 'math',
+    'form', 'input', 'textarea', 'button', 'select', 'option',
   ]);
 
   /** Các thẻ HTML chứa media/link cần loại bỏ thẻ nhưng GIỮ text content */
@@ -42,11 +43,11 @@
     'colgroup', 'col', 'caption',
   ]);
 
-  /** Các attribute được phép (mọi attribute khác đều bị loại bỏ) */
+  /** Các attribute được phép (đã loại bỏ 'id' và 'name' để chống DOM Clobbering) */
   const ALLOWED_ATTRIBUTES = new Set([
     'colspan', 'rowspan', 'scope', 'headers', 'align', 'valign',
     'width', 'height', 'cellpadding', 'cellspacing', 'border',
-    'dir', 'lang', 'class', 'id', 'title', 'role', 'aria-label',
+    'dir', 'lang', 'class', 'title', 'role', 'aria-label',
   ]);
 
   // ============================================================

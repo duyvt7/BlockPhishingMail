@@ -13,6 +13,22 @@
 const DEFAULT_WHITELIST = ['posco.com', 'posco.vn', 'posco.net', 'posco.co.kr', 'poscoway.net', 'steel-n.com', 'postown.net', 'easythanks-planet.com'];
 const STORAGE_KEY = 'whitelistDomains';
 
+/** Danh sách các nhà cung cấp email công cộng bị cấm thêm vào Whitelist doanh nghiệp */
+const DISALLOWED_PUBLIC_PROVIDERS = new Set([
+  'gmail.com', 'googlemail.com', 'yahoo.com', 'ymail.com', 'outlook.com',
+  'hotmail.com', 'live.com', 'msn.com', 'icloud.com', 'aol.com',
+  'mail.com', 'proton.me', 'protonmail.com', 'zoho.com'
+]);
+
+/** Danh sách các TLD không được phép thêm độc lập (tránh whitelist toàn bộ đuôi domain) */
+const DISALLOWED_TLDS = new Set([
+  'com', 'net', 'org', 'vn', 'edu', 'gov', 'mil', 'int', 'biz', 'info',
+  'co', 'io', 'ai', 'co.kr', 'com.vn', 'gov.vn', 'edu.vn', 'co.uk'
+]);
+
+/** Regex kiểm tra cú pháp domain tiêu chuẩn */
+const DOMAIN_FORMAT_REGEX = /^(?!-)[a-z0-9-]{1,63}(?<!-)(\.[a-z0-9-]{1,63}(?<!-))+$/i;
+
 /**
  * Lấy hoặc làm sạch Whitelist từ Storage:
  * Tự động loại bỏ google.com/gmail.com nếu còn lưu từ phiên bản trước
@@ -113,11 +129,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
 
         case 'ADD_DOMAIN': {
-          const { domain } = message.payload;
+          const { domain } = message.payload || {};
           if (!domain || typeof domain !== 'string') {
             return { success: false, error: 'Domain không hợp lệ.' };
           }
-          const normalized = domain.toLowerCase().trim();
+          const normalized = domain.toLowerCase().trim().replace(/^@+/, '').replace(/\.+$/, '');
+
+          if (!DOMAIN_FORMAT_REGEX.test(normalized) || normalized.length > 253) {
+            return { success: false, error: `"${normalized}" không phải định dạng domain hợp lệ (ví dụ: company.com).` };
+          }
+
+          if (DISALLOWED_TLDS.has(normalized)) {
+            return {
+              success: false,
+              error: `Không thể thêm đuôi tên miền ".${normalized}" vào Whitelist vì sẽ vô tình cho phép toàn bộ email thuộc đuôi này.`,
+            };
+          }
+
+          if (DISALLOWED_PUBLIC_PROVIDERS.has(normalized)) {
+            return {
+              success: false,
+              error: `Không thể thêm dịch vụ email công cộng "@${normalized}" vào Whitelist nội bộ vì lý do an toàn bảo mật.`,
+            };
+          }
+
           const data = await chrome.storage.local.get(STORAGE_KEY);
           const list = data[STORAGE_KEY] || [...DEFAULT_WHITELIST];
           if (!list.includes(normalized)) {

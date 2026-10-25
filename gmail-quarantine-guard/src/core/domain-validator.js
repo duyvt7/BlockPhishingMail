@@ -132,14 +132,15 @@
 
 
 
-      // Kiểm tra dải IP nội bộ POSCO: 172.*.*.* và 169.140.*.*
+      // Kiểm tra dải IP nội bộ: Private IP 172.16.0.0 - 172.31.255.255 (RFC 1918) và 169.140.*.* (POSCO)
       if (/^\d{1,3}(\.\d{1,3}){3}$/.test(domain)) {
-        if (/^172\.\d+\.\d+\.\d+$/.test(domain)) {
-          return { isInternal: true, domain, matchedRule: 'IP:172.*.*.*' };
+        if (/^172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+$/.test(domain)) {
+          return { isInternal: true, domain, matchedRule: 'IP:172.16-31.*.*' };
         }
         if (/^169\.140\.\d+\.\d+$/.test(domain)) {
           return { isInternal: true, domain, matchedRule: 'IP:169.140.*.*' };
         }
+        return { isInternal: false, domain, matchedRule: null };
       }
 
       for (const rule of this._whitelist) {

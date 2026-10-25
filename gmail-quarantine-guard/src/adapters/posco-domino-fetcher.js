@@ -570,7 +570,8 @@
      */
     async extractRowData(row, subject = '', senderCellText = '') {
       const docId = this.getDocId(row);
-      if (!docId) {
+      // Kiểm tra docId hợp lệ (8-64 ký tự alphanumeric/hex, chống Path Traversal)
+      if (!docId || !/^[0-9a-zA-Z_-]{8,64}$/.test(docId)) {
         return this.buildFallbackData(row, null, subject, senderCellText);
       }
 
@@ -615,13 +616,17 @@
         const senderEmail = this.extractSenderEmailFromHTML(html, currentUserId) || 'unverified@external.mail';
         const senderName = senderCellText || senderEmail;
 
-        // Trích xuất nội dung thư từ Domino HTML
+        // Trích xuất nội dung thư từ Domino HTML an toàn bằng DOMParser (không gán tempDiv.innerHTML)
         const rawHtml = this.extractBodyFromDominoHTML(html);
         let snippet = '';
         if (rawHtml) {
-          const tempDiv = document.createElement('div');
-          tempDiv.innerHTML = rawHtml;
-          snippet = (tempDiv.textContent || '').trim().substring(0, 200);
+          try {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(rawHtml, 'text/html');
+            snippet = (doc.body.textContent || '').trim().substring(0, 200);
+          } catch (_) {
+            snippet = rawHtml.replace(/<[^>]+>/g, '').trim().substring(0, 200);
+          }
         }
 
         const data = {
@@ -672,8 +677,8 @@
         return openDOMHTML;
       }
 
-      // 3. Tải tài liệu Domino qua OpenDocument
-      if (docId) {
+      // 3. Tải tài liệu Domino qua OpenDocument (chống Path Traversal)
+      if (docId && /^[0-9a-zA-Z_-]{8,64}$/.test(docId)) {
         const nsfPath = this.getNsfPath(typeof row === 'object' ? row : null);
         if (nsfPath) {
           const urlCandidates = [
